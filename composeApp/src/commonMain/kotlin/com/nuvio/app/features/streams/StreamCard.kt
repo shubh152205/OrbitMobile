@@ -25,6 +25,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Downloading
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +49,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.SkeletonBlock
 import com.nuvio.app.features.debrid.DebridProviders
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.streams_download_file
+import org.jetbrains.compose.resources.stringResource
 
 internal val LocalStreamHighlight = staticCompositionLocalOf<(StreamItem) -> String?> { { null } }
 
@@ -63,6 +72,9 @@ internal fun StreamCard(
     badgePlacement: StreamBadgePlacement,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    onDownloadClick: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
     modifier: Modifier = Modifier,
     isCurrent: Boolean = false,
     currentLabel: String? = null,
@@ -175,6 +187,29 @@ internal fun StreamCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        if (onDownloadClick != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = onDownloadClick,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = when {
+                        isDownloaded -> Icons.Rounded.DownloadDone
+                        isDownloading -> Icons.Rounded.Downloading
+                        else -> Icons.Rounded.Download
+                    },
+                    contentDescription = stringResource(Res.string.streams_download_file),
+                    tint = if (isDownloaded || isDownloading) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }

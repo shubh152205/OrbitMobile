@@ -256,7 +256,7 @@ val iosDistributionSourceDir = if (iosDistribution == "full") {
 } else {
     "src/iosAppStore/kotlin"
 }
-val iosFrameworkBundleId = "com.nuvio.media"
+val iosFrameworkBundleId = "com.orbit.media"
 val nuvioEngineAppleFramework = rootProject.file("../nuvio-engine/platform/apple/NuvioEngine.xcframework")
 val fullCommonSourceDir = project.file("src/fullCommonMain/kotlin")
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")

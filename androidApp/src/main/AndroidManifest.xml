@@ -46,6 +46,36 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
+                    android:scheme="orbit"
+                    android:host="auth"
+                    android:path="/simkl" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="orbit"
+                    android:host="auth"
+                    android:path="/trakt" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="orbit" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
                     android:scheme="nuvio"
                     android:host="auth"
                     android:path="/simkl" />

@@ -946,11 +946,12 @@ internal fun MainAppContent(
             resumeProgressFraction: Float?,
             manualSelection: Boolean,
             startFromBeginning: Boolean,
+            downloadMode: Boolean = false,
         ) {
             val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
             val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
 
-            if (!manualSelection) {
+            if (!manualSelection && !downloadMode) {
                 val downloadedItem = DownloadsRepository.findPlayableDownload(
                     parentMetaId = parentMetaId,
                     seasonNumber = seasonNumber,
@@ -1018,8 +1019,9 @@ internal fun MainAppContent(
                     pauseDescription = pauseDescription,
                     resumePositionMs = if (startFromBeginning) 0L else resumePositionMs,
                     resumeProgressFraction = targetResumeProgressFraction,
-                    manualSelection = manualSelection,
+                    manualSelection = manualSelection || downloadMode,
                     startFromBeginning = startFromBeginning,
+                    downloadMode = downloadMode,
                 ),
             )
             navController.navigate(
@@ -1096,6 +1098,30 @@ internal fun MainAppContent(
                     resumeProgressFraction = null,
                     manualSelection = true,
                     startFromBeginning = false,
+                )
+            }
+
+        val onDownloadContent: ContentPlayAction =
+            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
+                launchPlaybackWithDownloadPreference(
+                    type = type,
+                    videoId = videoId,
+                    parentMetaId = parentMetaId,
+                    parentMetaType = parentMetaType,
+                    title = title,
+                    logo = logo,
+                    poster = poster,
+                    background = background,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeTitle = episodeTitle,
+                    episodeThumbnail = episodeThumbnail,
+                    pauseDescription = pauseDescription,
+                    resumePositionMs = resumePositionMs,
+                    resumeProgressFraction = null,
+                    manualSelection = true,
+                    startFromBeginning = false,
+                    downloadMode = true,
                 )
             }
 
@@ -1510,6 +1536,7 @@ internal fun MainAppContent(
                         navController = navController,
                         onPlay = onPlay,
                         onPlayManually = onPlayManually,
+                        onDownload = onDownloadContent,
                         sharedTransitionScope = this@SharedTransitionLayout,
                         animatedVisibilityScope = LocalNavAnimatedContentScope.current,
                     )

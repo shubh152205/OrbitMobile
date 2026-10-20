@@ -36,9 +36,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Downloading
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.downloads.DownloadStatus
+import com.nuvio.app.features.downloads.DownloadsRepository
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -109,8 +119,13 @@ fun DetailSeriesContent(
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
     onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
+    onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = null,
     onSeasonLongPress: ((Int) -> Unit)? = null,
 ) {
+    val downloadsUiState by remember {
+        DownloadsRepository.ensureLoaded()
+        DownloadsRepository.uiState
+    }.collectAsStateWithLifecycle()
     val hasVideos = meta.videos.isNotEmpty()
     if (meta.type != "series" && !hasVideos) return
 
@@ -234,6 +249,7 @@ fun DetailSeriesContent(
                             ),
                             onEpisodeClick = onEpisodeClick,
                             onEpisodeLongPress = onEpisodeLongPress,
+                            onEpisodeDownloadClick = onEpisodeDownloadClick,
                         )
                     } else {
                         Column(
@@ -246,6 +262,21 @@ fun DetailSeriesContent(
                                     episodeNumber = episode.episode,
                                     fallbackVideoId = episode.id,
                                 )
+                                val episodeDownload = remember(downloadsUiState.items, meta.id, episode.season, episode.episode, episodeVideoId) {
+                                    DownloadsRepository.findDownload(
+                                        parentMetaId = meta.id,
+                                        seasonNumber = episode.season,
+                                        episodeNumber = episode.episode,
+                                        videoId = episodeVideoId,
+                                    ) ?: DownloadsRepository.findDownload(
+                                        parentMetaId = meta.id,
+                                        seasonNumber = episode.season,
+                                        episodeNumber = episode.episode,
+                                        videoId = episode.id,
+                                    )
+                                }
+                                val isEpisodeDownloaded = episodeDownload?.status == DownloadStatus.Completed
+                                val isEpisodeDownloading = episodeDownload?.status == DownloadStatus.Downloading || episodeDownload?.status == DownloadStatus.Paused
                                 EpisodeListCard(
                                     video = episode,
                                     fallbackImage = meta.background ?: meta.poster,
@@ -261,6 +292,9 @@ fun DetailSeriesContent(
                                     episodeRatingsVisibility = episodeRatingsVisibility,
                                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                                     sizing = sizing,
+                                    isDownloaded = isEpisodeDownloaded,
+                                    isDownloading = isEpisodeDownloading,
+                                    onDownloadClick = onEpisodeDownloadClick?.let { action -> { action(episode) } },
                                     onClick = { onEpisodeClick?.invoke(episode) },
                                     onLongPress = { onEpisodeLongPress?.invoke(episode) },
                                 )
@@ -321,8 +355,13 @@ internal fun DetailSeriesListEpisode(
     blurUnwatchedEpisodes: Boolean,
     onEpisodeClick: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: ((MetaVideo) -> Unit)?,
+    onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val downloadsUiState by remember {
+        DownloadsRepository.ensureLoaded()
+        DownloadsRepository.uiState
+    }.collectAsStateWithLifecycle()
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val sizing = seriesContentSizing(maxWidth.value)
         val episodeVideoId = buildPlaybackVideoId(
@@ -331,6 +370,21 @@ internal fun DetailSeriesListEpisode(
             episodeNumber = episode.episode,
             fallbackVideoId = episode.id,
         )
+        val episodeDownload = remember(downloadsUiState.items, meta.id, episode.season, episode.episode, episodeVideoId) {
+            DownloadsRepository.findDownload(
+                parentMetaId = meta.id,
+                seasonNumber = episode.season,
+                episodeNumber = episode.episode,
+                videoId = episodeVideoId,
+            ) ?: DownloadsRepository.findDownload(
+                parentMetaId = meta.id,
+                seasonNumber = episode.season,
+                episodeNumber = episode.episode,
+                videoId = episode.id,
+            )
+        }
+        val isEpisodeDownloaded = episodeDownload?.status == DownloadStatus.Completed
+        val isEpisodeDownloading = episodeDownload?.status == DownloadStatus.Downloading || episodeDownload?.status == DownloadStatus.Paused
         EpisodeListCard(
             video = episode,
             fallbackImage = meta.background ?: meta.poster,
@@ -346,6 +400,9 @@ internal fun DetailSeriesListEpisode(
             episodeRatingsVisibility = episodeRatingsVisibility,
             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
             sizing = sizing,
+            isDownloaded = isEpisodeDownloaded,
+            isDownloading = isEpisodeDownloading,
+            onDownloadClick = onEpisodeDownloadClick?.let { action -> { action(episode) } },
             onClick = { onEpisodeClick?.invoke(episode) },
             onLongPress = { onEpisodeLongPress?.invoke(episode) },
         )
@@ -711,7 +768,12 @@ private fun EpisodeHorizontalRow(
     preferredEpisodeNumber: Int? = null,
     onEpisodeClick: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: ((MetaVideo) -> Unit)?,
+    onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = null,
 ) {
+    val downloadsUiState by remember {
+        DownloadsRepository.ensureLoaded()
+        DownloadsRepository.uiState
+    }.collectAsStateWithLifecycle()
     val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
     val listState = rememberLazyListState()
     var hasPositioned by remember(episodes) { mutableStateOf(false) }
@@ -753,6 +815,21 @@ private fun EpisodeHorizontalRow(
                 episodeNumber = episode.episode,
                 fallbackVideoId = episode.id,
             )
+            val episodeDownload = remember(downloadsUiState.items, parentMetaId, episode.season, episode.episode, episodeVideoId) {
+                DownloadsRepository.findDownload(
+                    parentMetaId = parentMetaId,
+                    seasonNumber = episode.season,
+                    episodeNumber = episode.episode,
+                    videoId = episodeVideoId,
+                ) ?: DownloadsRepository.findDownload(
+                    parentMetaId = parentMetaId,
+                    seasonNumber = episode.season,
+                    episodeNumber = episode.episode,
+                    videoId = episode.id,
+                )
+            }
+            val isEpisodeDownloaded = episodeDownload?.status == DownloadStatus.Completed
+            val isEpisodeDownloading = episodeDownload?.status == DownloadStatus.Downloading || episodeDownload?.status == DownloadStatus.Paused
             EpisodeHorizontalCard(
                 video = episode,
                 fallbackImage = fallbackImage,
@@ -768,6 +845,9 @@ private fun EpisodeHorizontalRow(
                 episodeRatingsVisibility = episodeRatingsVisibility,
                 blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                 metrics = rowMetrics,
+                isDownloaded = isEpisodeDownloaded,
+                isDownloading = isEpisodeDownloading,
+                onDownloadClick = onEpisodeDownloadClick?.let { action -> { action(episode) } },
                 onClick = { onEpisodeClick?.invoke(episode) },
                 onLongPress = { onEpisodeLongPress?.invoke(episode) },
             )
@@ -786,6 +866,9 @@ private fun EpisodeHorizontalCard(
     episodeRatingsVisibility: EpisodeRatingsVisibility,
     blurUnwatchedEpisodes: Boolean,
     metrics: EpisodeHorizontalCardMetrics,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    onDownloadClick: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -857,6 +940,38 @@ private fun EpisodeHorizontalCard(
                 .align(Alignment.TopEnd)
                 .padding(metrics.contentPadding),
         )
+
+        if (onDownloadClick != null) {
+            IconButton(
+                onClick = onDownloadClick,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(metrics.contentPadding)
+                    .size(32.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+            ) {
+                Icon(
+                    imageVector = when {
+                        isDownloaded -> Icons.Rounded.DownloadDone
+                        isDownloading -> Icons.Rounded.Downloading
+                        else -> Icons.Rounded.Download
+                    },
+                    contentDescription = stringResource(
+                        when {
+                            isDownloaded -> Res.string.action_downloaded
+                            isDownloading -> Res.string.action_downloading
+                            else -> Res.string.action_download
+                        }
+                    ),
+                    tint = if (isDownloaded || isDownloading) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White
+                    },
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -1172,6 +1287,9 @@ private fun EpisodeListCard(
     episodeRatingsVisibility: EpisodeRatingsVisibility,
     blurUnwatchedEpisodes: Boolean,
     sizing: SeriesContentSizing,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    onDownloadClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
@@ -1255,7 +1373,7 @@ private fun EpisodeListCard(
                     .weight(1f)
                     .padding(
                         start = sizing.contentHorizontalPadding,
-                        end = sizing.contentHorizontalPadding,
+                        end = if (onDownloadClick != null) 4.dp else sizing.contentHorizontalPadding,
                         top = sizing.contentVerticalPadding,
                         bottom = sizing.contentVerticalPadding,
                     ),
@@ -1312,6 +1430,37 @@ private fun EpisodeListCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = sizing.overviewMaxLines,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            if (onDownloadClick != null) {
+                IconButton(
+                    onClick = onDownloadClick,
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = sizing.contentHorizontalPadding)
+                        .size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = when {
+                            isDownloaded -> Icons.Rounded.DownloadDone
+                            isDownloading -> Icons.Rounded.Downloading
+                            else -> Icons.Rounded.Download
+                        },
+                        contentDescription = stringResource(
+                            when {
+                                isDownloaded -> Res.string.action_downloaded
+                                isDownloading -> Res.string.action_downloading
+                                else -> Res.string.action_download
+                            }
+                        ),
+                        tint = if (isDownloaded || isDownloading) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }

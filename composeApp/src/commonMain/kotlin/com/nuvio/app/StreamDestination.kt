@@ -291,11 +291,11 @@ internal fun StreamDestination(
 
     var reuseHandled by rememberSaveable(launch.videoId, effectiveVideoId) { mutableStateOf(false) }
     var reuseNavigated by remember { mutableStateOf(false) }
-    LaunchedEffect(effectiveVideoId, hasResolvedVideoId, playerSettings.streamReuseLastLinkEnabled, launch.manualSelection) {
+    LaunchedEffect(effectiveVideoId, hasResolvedVideoId, playerSettings.streamReuseLastLinkEnabled, launch.manualSelection, launch.downloadMode) {
         if (!hasResolvedVideoId) return@LaunchedEffect
         if (reuseHandled) return@LaunchedEffect
         reuseHandled = true
-        if (launch.manualSelection) return@LaunchedEffect
+        if (launch.manualSelection || launch.downloadMode) return@LaunchedEffect
         if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
         val cacheKey = StreamLinkCacheRepository.contentKey(
             type = launch.type,
@@ -400,16 +400,16 @@ internal fun StreamDestination(
         episode = launch.episodeNumber,
         manualSelection = launch.manualSelection,
     )
-    val showLoadingScreen = autoPlayNavigationStarted || resolvingDebridStream || resolvingYouTubeStream || preparingServerStream || streamsUiState.shouldShowAutoPlayLoading(
+    val showLoadingScreen = !launch.downloadMode && (autoPlayNavigationStarted || resolvingDebridStream || resolvingYouTubeStream || preparingServerStream || streamsUiState.shouldShowAutoPlayLoading(
         expectedRequestToken = expectedStreamsRequestToken,
         settings = playerSettings,
         manualSelection = launch.manualSelection,
-    )
-    val useLandscapeLoading = autoPlayNavigationStarted || streamsUiState.shouldUseLandscapeAutoPlayLoading(
+    ))
+    val useLandscapeLoading = !launch.downloadMode && (autoPlayNavigationStarted || streamsUiState.shouldUseLandscapeAutoPlayLoading(
         expectedRequestToken = expectedStreamsRequestToken,
         settings = playerSettings,
         manualSelection = launch.manualSelection,
-    )
+    ))
     SideEffect { onLandscapeLoadingChanged(useLandscapeLoading) }
     var autoPlayHandled by rememberSaveable(launch.videoId, effectiveVideoId) { mutableStateOf(false) }
     LaunchedEffect(
@@ -418,9 +418,10 @@ internal fun StreamDestination(
         expectedStreamsRequestToken,
         reuseHandled,
         launch.manualSelection,
+        launch.downloadMode,
     ) {
         if (!reuseHandled) return@LaunchedEffect
-        if (launch.manualSelection) return@LaunchedEffect
+        if (launch.manualSelection || launch.downloadMode) return@LaunchedEffect
         if (reuseNavigated) return@LaunchedEffect
         if (autoPlayHandled) return@LaunchedEffect
         if (streamsUiState.requestToken != expectedStreamsRequestToken) return@LaunchedEffect
@@ -802,6 +803,7 @@ internal fun StreamDestination(
                 resumePositionMs = launch.resumePositionMs,
                 resumeProgressFraction = launch.resumeProgressFraction,
                 manualSelection = launch.manualSelection,
+                downloadMode = launch.downloadMode,
                 startFromBeginning = launch.startFromBeginning,
                 onStreamSelected = { stream, resolvedResumePositionMs, resolvedResumeProgressFraction ->
                     openSelectedStream(

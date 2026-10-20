@@ -39,6 +39,9 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -112,6 +115,8 @@ import com.nuvio.app.features.details.components.TabletDetailBackdrop
 import com.nuvio.app.features.details.components.TabletDetailHero
 import com.nuvio.app.features.details.components.TrailerPlayerPopup
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.downloads.DownloadStatus
+import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.PendingTrackingMembershipRemoval
@@ -173,6 +178,7 @@ fun MetaDetailsScreen(
     onBack: () -> Unit,
     onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
     onPlayManually: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
+    onDownload: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
     onOpenMeta: ((MetaPreview) -> Unit)? = null,
     onCastClick: ((MetaPerson, String?) -> Unit)? = null,
     onCompanyClick: ((MetaCompany, String) -> Unit)? = null,
@@ -898,6 +904,100 @@ fun MetaDetailsScreen(
                             }
                         }
                     }
+                val downloadsUiState by remember {
+                    DownloadsRepository.ensureLoaded()
+                    DownloadsRepository.uiState
+                }.collectAsStateWithLifecycle()
+                val isSeries = meta.type == "series" || hasEpisodes
+                val primarySeasonNumber = if (isSeries) seriesAction?.seasonNumber else null
+                val primaryEpisodeNumber = if (isSeries) seriesAction?.episodeNumber else null
+                val primaryDownload = remember(downloadsUiState.items, meta.id, primarySeasonNumber, primaryEpisodeNumber, primaryVideoId) {
+                    DownloadsRepository.findDownload(
+                        parentMetaId = meta.id,
+                        seasonNumber = primarySeasonNumber,
+                        episodeNumber = primaryEpisodeNumber,
+                        videoId = primaryVideoId,
+                    )
+                }
+                val isPrimaryDownloaded = primaryDownload?.status == DownloadStatus.Completed
+                val isPrimaryDownloading = primaryDownload?.status == DownloadStatus.Downloading || primaryDownload?.status == DownloadStatus.Paused
+                val onPrimaryDownloadClick: (() -> Unit)? = onDownload?.let { downloadAction ->
+                    {
+                        when {
+                            isSeries && seriesAction != null -> {
+                                downloadAction.invoke(
+                                    meta.type,
+                                    seriesStreamVideoId ?: seriesAction.videoId,
+                                    meta.id,
+                                    meta.type,
+                                    meta.name,
+                                    meta.logo,
+                                    meta.poster,
+                                    meta.background,
+                                    seriesAction.seasonNumber,
+                                    seriesAction.episodeNumber,
+                                    seriesAction.episodeTitle,
+                                    seriesAction.episodeThumbnail,
+                                    seriesPauseDescription,
+                                    seriesAction.resumePositionMs,
+                                )
+                            }
+                            !isSeries -> {
+                                downloadAction.invoke(
+                                    meta.type,
+                                    meta.id,
+                                    meta.id,
+                                    meta.type,
+                                    meta.name,
+                                    meta.logo,
+                                    meta.poster,
+                                    meta.background,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    meta.description,
+                                    movieProgress?.lastPositionMs,
+                                )
+                            }
+                        }
+                    }
+                }
+                val onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = onDownload?.let { downloadAction ->
+                    { video ->
+                        val season = video.season
+                        val episode = video.episode
+                        val playbackVideoId = buildPlaybackVideoId(
+                            parentMetaId = meta.id,
+                            seasonNumber = season,
+                            episodeNumber = episode,
+                            fallbackVideoId = video.id,
+                        )
+                        val streamVideoId = video.id.takeIf { it.isNotBlank() } ?: playbackVideoId
+                        val savedProgress = watchProgressUiState.progressForVideo(
+                            videoId = streamVideoId,
+                            parentMetaId = meta.id,
+                            seasonNumber = season,
+                            episodeNumber = episode,
+                        )?.takeUnless { it.isCompleted }
+                        downloadAction.invoke(
+                            meta.type,
+                            streamVideoId,
+                            meta.id,
+                            meta.type,
+                            meta.name,
+                            meta.logo,
+                            meta.poster,
+                            meta.background,
+                            season,
+                            episode,
+                            video.title,
+                            video.thumbnail,
+                            video.overview,
+                            savedProgress?.lastPositionMs,
+                        )
+                    }
+                }
                 val onEpisodePlayClick: (MetaVideo) -> Unit = { video ->
                     val season = video.season
                     val episode = video.episode
@@ -1176,9 +1276,12 @@ fun MetaDetailsScreen(
                                                         isWatched = isWatched,
                                                         isTablet = true,
                                                         shuffleEnabled = shuffleSettings.enabled,
+                                                        isDownloaded = isPrimaryDownloaded,
+                                                        isDownloading = isPrimaryDownloading,
                                                         onPlayClick = onPrimaryPlayClick,
                                                         onPlayLongClick = if (showManualPlayOption) onPrimaryPlayLongClick else null,
                                                         onShuffleClick = onShuffleClick,
+                                                        onDownloadClick = onPrimaryDownloadClick,
                                                         onWatchedClick = toggleWatched,
                                                         onSaveClick = toggleSaved,
                                                         onSaveLongClick = openLibraryListPicker,
@@ -1236,6 +1339,10 @@ fun MetaDetailsScreen(
                                     onSaveLongClick = openLibraryListPicker,
                                     onWatchedClick = toggleWatched,
                                     showManualPlayOption = showManualPlayOption,
+                                    isDownloaded = isPrimaryDownloaded,
+                                    isDownloading = isPrimaryDownloading,
+                                    onDownloadClick = onPrimaryDownloadClick,
+                                    onEpisodeDownloadClick = onEpisodeDownloadClick,
                                     preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
                                     preferredEpisodeNumber = seriesAction?.episodeNumber,
                                     hasProductionSection = hasProductionSection,
@@ -1768,6 +1875,62 @@ fun MetaDetailsScreen(
                             ),
                         )
                     }
+                    if (
+                        onDownload != null &&
+                        playbackAvailability.canStream(meta.type, selectedEpisode.id)
+                    ) {
+                        val episodeDownload = DownloadsRepository.findDownload(
+                            parentMetaId = meta.id,
+                            seasonNumber = selectedEpisode.season,
+                            episodeNumber = selectedEpisode.episode,
+                            videoId = selectedEpisode.id,
+                        )
+                        val isEpDownloaded = episodeDownload?.status == DownloadStatus.Completed
+                        val isEpDownloading = episodeDownload?.status == DownloadStatus.Downloading || episodeDownload?.status == DownloadStatus.Paused
+                        val downloadIcon = when {
+                            isEpDownloaded -> Icons.Rounded.DownloadDone
+                            isEpDownloading -> Icons.Rounded.Downloading
+                            else -> Icons.Rounded.Download
+                        }
+                        val downloadLabel = when {
+                            isEpDownloaded -> stringResource(Res.string.action_downloaded)
+                            isEpDownloading -> stringResource(Res.string.action_downloading)
+                            else -> stringResource(Res.string.action_download)
+                        }
+                        add(
+                            PosterZoomOverlayAction(
+                                icon = downloadIcon,
+                                label = downloadLabel,
+                                onSelected = {
+                                    val playbackVideoId = buildPlaybackVideoId(
+                                        parentMetaId = meta.id,
+                                        seasonNumber = selectedEpisode.season,
+                                        episodeNumber = selectedEpisode.episode,
+                                        fallbackVideoId = selectedEpisode.id,
+                                    )
+                                    val streamVideoId = selectedEpisode.id.takeIf { it.isNotBlank() } ?: playbackVideoId
+                                    val savedProgress = progressByVideoId[streamVideoId]
+                                        ?.takeUnless { it.isCompleted }
+                                    onDownload.invoke(
+                                        meta.type,
+                                        streamVideoId,
+                                        meta.id,
+                                        meta.type,
+                                        meta.name,
+                                        meta.logo,
+                                        meta.poster,
+                                        meta.background,
+                                        selectedEpisode.season,
+                                        selectedEpisode.episode,
+                                        selectedEpisode.title,
+                                        selectedEpisode.thumbnail,
+                                        selectedEpisode.overview,
+                                        savedProgress?.lastPositionMs,
+                                    )
+                                },
+                            ),
+                        )
+                    }
                 },
                 hazeState = episodeOverlayHazeState,
                 onDismissed = {
@@ -1923,6 +2086,10 @@ private fun LazyListScope.configuredMetaSectionItems(
     onSaveLongClick: (() -> Unit)?,
     onWatchedClick: () -> Unit,
     showManualPlayOption: Boolean,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    onDownloadClick: (() -> Unit)? = null,
+    onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = null,
     preferredEpisodeSeasonNumber: Int?,
     preferredEpisodeNumber: Int?,
     hasProductionSection: Boolean,
@@ -2000,10 +2167,13 @@ private fun LazyListScope.configuredMetaSectionItems(
                     isPrimaryPlayEnabled = isPrimaryPlayEnabled,
                     isSaved = isSaved,
                     isWatched = isWatched,
+                    isDownloaded = isDownloaded,
+                    isDownloading = isDownloading,
                     onPrimaryPlayClick = onPrimaryPlayClick,
                     onShuffleClick = onShuffleClick,
                     shuffleEnabled = shuffleEnabled,
                     onPrimaryPlayLongClick = onPrimaryPlayLongClick,
+                    onDownloadClick = onDownloadClick,
                     onSaveClick = onSaveClick,
                     onSaveLongClick = onSaveLongClick,
                     onWatchedClick = onWatchedClick,
@@ -2034,6 +2204,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     onEpisodeClick = onEpisodeClick,
                     onEpisodeLongPress = onEpisodeLongPress,
+                    onEpisodeDownloadClick = onEpisodeDownloadClick,
                     onSeasonLongPress = onSeasonLongPress,
                     onOpenMeta = onOpenMeta,
                     onCastClick = onCastClick,
@@ -2092,6 +2263,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     onEpisodeClick = onEpisodeClick,
                     onEpisodeLongPress = onEpisodeLongPress,
+                    onEpisodeDownloadClick = onEpisodeDownloadClick,
                 )
             }
         }
@@ -2229,10 +2401,13 @@ private fun ConfiguredMetaSections(
     isPrimaryPlayEnabled: Boolean,
     isSaved: Boolean,
     isWatched: Boolean,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
     onPrimaryPlayClick: () -> Unit,
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
     onPrimaryPlayLongClick: (() -> Unit)?,
+    onDownloadClick: (() -> Unit)? = null,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
     onWatchedClick: () -> Unit,
@@ -2263,6 +2438,7 @@ private fun ConfiguredMetaSections(
     blurUnwatchedEpisodes: Boolean,
     onEpisodeClick: (MetaVideo) -> Unit,
     onEpisodeLongPress: (MetaVideo) -> Unit,
+    onEpisodeDownloadClick: ((MetaVideo) -> Unit)? = null,
     onSeasonLongPress: (Int) -> Unit,
     onOpenMeta: ((MetaPreview) -> Unit)?,
     onCastClick: ((MetaPerson, String?) -> Unit)?,
@@ -2299,9 +2475,12 @@ private fun ConfiguredMetaSections(
                     isWatched = isWatched,
                     isTablet = isTablet,
                     shuffleEnabled = shuffleEnabled,
+                    isDownloaded = isDownloaded,
+                    isDownloading = isDownloading,
                     onPlayClick = onPrimaryPlayClick,
                     onPlayLongClick = if (showManualPlayOption) onPrimaryPlayLongClick else null,
                     onShuffleClick = onShuffleClick,
+                    onDownloadClick = onDownloadClick,
                     onWatchedClick = onWatchedClick,
                     onSaveClick = onSaveClick,
                     onSaveLongClick = onSaveLongClick,
@@ -2372,6 +2551,7 @@ private fun ConfiguredMetaSections(
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onEpisodeClick = onEpisodeClick,
                         onEpisodeLongPress = onEpisodeLongPress,
+                        onEpisodeDownloadClick = onEpisodeDownloadClick,
                         onSeasonLongPress = onSeasonLongPress,
                     )
                 }

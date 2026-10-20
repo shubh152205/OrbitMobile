@@ -56,6 +56,34 @@ object DownloadsRepository {
         }
     }
 
+    fun findDownload(
+        parentMetaId: String,
+        seasonNumber: Int? = null,
+        episodeNumber: Int? = null,
+        videoId: String? = null,
+    ): DownloadItem? {
+        ensureLoaded()
+        val items = _uiState.value.items
+        val normalizedVideoId = videoId?.trim().orEmpty()
+        if (normalizedVideoId.isNotBlank()) {
+            items.firstOrNull { it.videoId == normalizedVideoId }?.let { return it }
+        }
+        val normalizedParentMetaId = parentMetaId.trim()
+        return if (seasonNumber != null && episodeNumber != null) {
+            items.firstOrNull { item ->
+                item.parentMetaId == normalizedParentMetaId &&
+                    item.seasonNumber == seasonNumber &&
+                    item.episodeNumber == episodeNumber
+            }
+        } else {
+            items.firstOrNull { item ->
+                item.parentMetaId == normalizedParentMetaId &&
+                    item.seasonNumber == null &&
+                    item.episodeNumber == null
+            }
+        }
+    }
+
     fun findPlayableDownload(
         parentMetaId: String,
         seasonNumber: Int? = null,

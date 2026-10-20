@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.AppIconResource
 import com.nuvio.app.core.ui.appIconPainter
 import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.action_download
+import nuvio.composeapp.generated.resources.action_downloaded
+import nuvio.composeapp.generated.resources.action_downloading
 import nuvio.composeapp.generated.resources.action_play
 import nuvio.composeapp.generated.resources.details_actions_menu_label
 import nuvio.composeapp.generated.resources.hero_add_to_library
@@ -256,6 +262,9 @@ fun DetailActions(
     onWatchedClick: () -> Unit,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    onDownloadClick: (() -> Unit)? = null,
 ) {
     val shuffleAction = onShuffleClick?.let { onClick ->
         DetailSecondaryAction(
@@ -271,6 +280,26 @@ fun DetailActions(
         pinnedAction = shuffleAction?.takeIf { shuffleEnabled },
         secondaryActions = buildList {
             if (!shuffleEnabled) shuffleAction?.let(::add)
+            if (onDownloadClick != null) {
+                add(
+                    DetailSecondaryAction(
+                        label = stringResource(
+                            when {
+                                isDownloaded -> Res.string.action_downloaded
+                                isDownloading -> Res.string.action_downloading
+                                else -> Res.string.action_download
+                            },
+                        ),
+                        icon = when {
+                            isDownloaded -> Icons.Rounded.DownloadDone
+                            isDownloading -> Icons.Rounded.Downloading
+                            else -> Icons.Rounded.Download
+                        },
+                        isActive = isDownloaded || isDownloading,
+                        onClick = onDownloadClick,
+                    ),
+                )
+            }
             add(
                 DetailSecondaryAction(
                     label = stringResource(if (isWatched) Res.string.hero_mark_unwatched else Res.string.hero_mark_watched),
